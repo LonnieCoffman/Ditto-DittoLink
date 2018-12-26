@@ -13,23 +13,34 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import static
 
-CLOSE_POSITION_MESSAGE = '''POSITION CLOSED:  ===============================
-                  Time: {time} EST
-                  Pair: {instrument}
+CLOSE_TRADE_MESSAGE = '''TRADE CLOSED:  ===============================
+                  Time:  {time} EST
+                  Pair:  {instrument}
                   Units: {units} ({direction})
-                  P/L: ${pl}
+                  FXtID: {fxtid}
+                  MT4ID: {mt4id}
+                  P/L:  ${pl}
+                  ==============================='''
+CLOSE_POSITION_MESSAGE = '''POSITION CLOSED:  ===============================
+                  Time:  {time} EST
+                  Pair:  {instrument}
+                  Units: {units} ({direction})
+                  P/L:  ${pl}
                   ==============================='''
 CLOSE_PARTIAL_MESSAGE = '''PARTIAL CLOSE:  ===============================
-                  Time: {time} EST
-                  Pair: {instrument}
+                  Time:  {time} EST
+                  Pair:  {instrument}
                   Units: {units} ({direction})
-                  P/L: ${pl}
+                  P/L:  ${pl}
                   ==============================='''
-OPEN_POSITION_MESSAGE = '''POSITION OPENED:  ===============================
-                  Time: {time} EST
-                  Pair: {instrument}
+OPEN_TRADE_MESSAGE = '''TRADE OPENED:  ===============================
+                  Time:  {time} EST
+                  Pair:  {instrument}
                   Units: {units} ({direction})
+                  FXtID: {fxtid}
+                  MT4ID: {mt4id}
                   ==============================='''
+
 #######################################################
 # create a lock file to prevent mt4 from accessing data
 #######################################################
@@ -79,9 +90,9 @@ def close_position(fn):
                 numUnits = "ALL"
 
             if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live')
+                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice')
+                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             if (side == "long" or side == "both"):
                 #close long positions
@@ -129,8 +140,37 @@ def close_trade(fn):
         try:
             _,tradeID,side,numUnits = fn.split('-')
 
-            numUnits = int(numUnits)
-            tradeID = int(tradeID)
+            if (numUnits == "0"):
+                numUnits = "ALL"
+
+            if (static.live_trading):
+                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            else:
+                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+
+            if (side == "short"):
+                r = trades.TradeClose(static.short_account_id,tradeID,{"units": numUnits})
+            else:
+                r = trades.TradeClose(static.long_account_id,tradeID,{"units": numUnits})
+
+            try:
+                rv = client.request(r)
+                #print(rv)
+
+                pl = '{:,.2f}'.format(float(rv["orderFillTransaction"]["pl"]))
+                units = abs(int(rv["orderFillTransaction"]["units"]))
+                time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
+                instrument = rv["orderFillTransaction"]["instrument"]
+                mt4id = rv["orderFillTransaction"]["tradesClosed"][0]["clientTradeID"].replace("@","")
+                fxtid = rv["orderFillTransaction"]["tradesClosed"][0]["tradeID"]
+
+                if (numUnits == "ALL"):
+                     print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, mt4id=mt4id, fxtid=fxtid, pl=pl))
+                else:
+                     print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, nt4id=mt4id, fxtid=fxtid, pl=pl))
+            
+            except V20Error as err:
+                print("V20Error occurred: {}".format(err))
 
         except Exception as e:
             print(e)
@@ -158,9 +198,9 @@ def open_trade(fn):
                 tradeClientExtensions = modOrder.data)
 
             if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live')
+                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice')
+                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
             
             if (side == "short"):
                 r = orders.OrderCreate(static.short_account_id,data=mktOrder.data)
@@ -168,19 +208,18 @@ def open_trade(fn):
                 r = orders.OrderCreate(static.long_account_id,data=mktOrder.data)
 
             try:
-                client.request(r)
-
-                failure = r.response["orderCancelTransaction"]["reason"]
+                rv = client.request(r)
                 
-                if (failure == "MARKET_HALTED"):
-                    print("Unable to place order: Market Halted")
+                if "orderCancelTransaction" in rv:
+                    reason = rv["orderCancelTransaction"]["reason"]
+                
+                    print("NOTICE: "+reason)
                 else:
-                    rawUnits = int(r.response["orderFillTransaction"]["units"])
-
-                    units = abs(rawUnits)
+                    units = abs(int(rv["orderFillTransaction"]["units"]))
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
-                
-                    print(OPEN_POSITION_MESSAGE.format(time=time, instrument=pair, direction=side, units=units))
+                    fxtid = int(rv["orderFillTransaction"]["tradeOpened"]["tradeID"])
+                    mt4id = rv["orderFillTransaction"]["tradeOpened"]["clientExtensions"]["id"].replace("@","")
+                    print(OPEN_TRADE_MESSAGE.format(time=time, instrument=pair, direction=side, units=units, fxtid=fxtid, mt4id=mt4id))
                 
             except V20Error as err:
                 print("V20Error occurred: {}".format(err))
@@ -218,15 +257,15 @@ def update_trade_data(updateNow = False):
             for trade in rv["trades"]:
 
                 if trade["state"] == 'OPEN':
-                    mt4id = 0
+                    mt4id = "0"
                     if ("clientExtensions" in trade):
                         if ("id" in trade["clientExtensions"]):
-                            mt4id = trade["clientExtensions"]["id"]
+                            mt4id = str(trade["clientExtensions"]["id"])
 
                     currentTrades.append(str(trade["instrument"].replace("_",""))+"_"+
                                          str("long")+"_"+
                                          str(trade["id"])+"_"+
-                                         str(mt4id)+"_"+
+                                         str(mt4id.replace("@",""))+"_"+
                                          str(trade["openTime"].split('.')[0])+"_"+
                                          str(trade["currentUnits"])+"_"+
                                          str(trade["price"])+"_"+
@@ -239,15 +278,15 @@ def update_trade_data(updateNow = False):
             for trade in rv["trades"]:
 
                 if trade["state"] == 'OPEN':
-                    mt4id = 0
+                    mt4id = "0"
                     if ("clientExtensions" in trade):
                         if ("id" in trade["clientExtensions"]):
-                            mt4id = trade["clientExtensions"]["id"]
+                            mt4id = str(trade["clientExtensions"]["id"])
 
                     currentTrades.append(str(trade["instrument"].replace("_",""))+"_"+
                                          str("short")+"_"+
                                          str(trade["id"])+"_"+
-                                         str(mt4id)+"_"+
+                                         str(mt4id.replace("@",""))+"_"+
                                          str(trade["openTime"].split('.')[0])+"_"+
                                          str(trade["currentUnits"])+"_"+
                                          str(trade["price"])+"_"+
@@ -257,12 +296,7 @@ def update_trade_data(updateNow = False):
             for trade in currentTrades:
                 file.write(str(trade+"\n"))
             file.close()
-            # if currentTrades:
-            #     for instrument, ids in currentTrades.items():
-            #         file = open(static.filepath+"trades-"+instrument+".txt","w")
-            #         for id in ids:
-            #             file.write(str(id+"\n"))
-            #         file.close()
+
         except Exception as e:
             print(e)
 
@@ -280,9 +314,9 @@ def update_positions():
                     os.remove(static.filepath+fn)
 
             if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live')
+                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice')
+                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             # update short positions
             response = positions.OpenPositions(static.short_account_id)
@@ -355,9 +389,9 @@ def update_account():
         create_lock_file()
 
         if (static.live_trading):
-            client = oandapyV20.API(static.token, environment='live')
+            client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
         else:
-            client = oandapyV20.API(static.token, environment='practice')        
+            client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})        
 
         # update short account
         response = accounts.AccountDetails(static.short_account_id)
