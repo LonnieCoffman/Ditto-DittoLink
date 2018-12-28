@@ -214,6 +214,7 @@ def open_trade(fn):
                     reason = rv["orderCancelTransaction"]["reason"]
                 
                     print("NOTICE: "+reason)
+                    print("DETAILS: "+pair+"|"+side+"|"+str(size)+"|"+mt4TradeID)
                 else:
                     units = abs(int(rv["orderFillTransaction"]["units"]))
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
