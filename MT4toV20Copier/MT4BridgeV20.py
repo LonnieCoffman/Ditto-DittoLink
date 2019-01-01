@@ -7,7 +7,7 @@ import functions as bridge
 import time, datetime
 import static
 
-accountID = static.short_account_id
+#accountID = static.first_account_id
 access_token = static.token
 
 if (static.live_trading):
@@ -18,6 +18,7 @@ else:
 bridge.alive_check()
 bridge.update_account()
 bridge.update_positions()
+bridge.update_trade_data()
 
 alive_timer = 1
 

@@ -96,7 +96,10 @@ def close_position(fn):
 
             if (side == "long" or side == "both"):
                 #close long positions
-                r = positions.PositionClose(static.long_account_id, instrument, {"longUnits": numUnits})
+                if (static.second_account_id == ""):
+                    r = positions.PositionClose(static.first_account_id, instrument, {"longUnits": numUnits})
+                else:
+                    r = positions.PositionClose(static.second_account_id, instrument, {"longUnits": numUnits})
                 try:
                     client.request(r)
                     pl = '{:,.2f}'.format(float(r.response["longOrderFillTransaction"]["pl"]))
@@ -111,7 +114,7 @@ def close_position(fn):
 
             if (side == "short" or side == "both"):
                 #close short positions
-                r = positions.PositionClose(static.short_account_id, instrument, {"shortUnits": numUnits})
+                r = positions.PositionClose(static.first_account_id, instrument, {"shortUnits": numUnits})
                 try:
                     client.request(r)
                     pl = '{:,.2f}'.format(float(r.response["shortOrderFillTransaction"]["pl"]))
@@ -149,9 +152,12 @@ def close_trade(fn):
                 client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             if (side == "short"):
-                r = trades.TradeClose(static.short_account_id,tradeID,{"units": numUnits})
+                r = trades.TradeClose(static.first_account_id,tradeID,{"units": numUnits})
             else:
-                r = trades.TradeClose(static.long_account_id,tradeID,{"units": numUnits})
+                if (static.second_account_id == ""):
+                    r = trades.TradeClose(static.first_account_id,tradeID,{"units": numUnits})
+                else:
+                    r = trades.TradeClose(static.second_account_id,tradeID,{"units": numUnits})
 
             try:
                 rv = client.request(r)
@@ -203,9 +209,12 @@ def open_trade(fn):
                 client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
             
             if (side == "short"):
-                r = orders.OrderCreate(static.short_account_id,data=mktOrder.data)
+                r = orders.OrderCreate(static.first_account_id,data=mktOrder.data)
             else:
-                r = orders.OrderCreate(static.long_account_id,data=mktOrder.data)
+                if (static.second_account_id == ""):
+                    r = orders.OrderCreate(static.first_account_id,data=mktOrder.data)
+                else:
+                    r = orders.OrderCreate(static.second_account_id,data=mktOrder.data)
 
             try:
                 rv = client.request(r)
@@ -247,51 +256,80 @@ def update_trade_data(updateNow = False):
             else:
                 client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
-            # get long trades
-            response = trades.OpenTrades(static.long_account_id)
-            rv = client.request(response)
-            
-            #print(rv)
-
             currentTrades = []
+            
+            if (static.second_account_id == ""):
+                # get combined
+                response = trades.OpenTrades(static.first_account_id)
+                rv = client.request(response)
 
-            for trade in rv["trades"]:
+                #print(rv)
 
-                if trade["state"] == 'OPEN':
-                    mt4id = "0"
-                    if ("clientExtensions" in trade):
-                        if ("id" in trade["clientExtensions"]):
-                            mt4id = str(trade["clientExtensions"]["id"])
+                for trade in rv["trades"]:
 
-                    currentTrades.append(str(trade["instrument"].replace("_",""))+"_"+
-                                         str("long")+"_"+
-                                         str(trade["id"])+"_"+
-                                         str(mt4id.replace("@",""))+"_"+
-                                         str(trade["openTime"].split('.')[0])+"_"+
-                                         str(trade["currentUnits"])+"_"+
-                                         str(trade["price"])+"_"+
-                                         str(trade["financing"]))
+                    if trade["state"] == 'OPEN':
+                        mt4id = "0"
+                        if ("clientExtensions" in trade):
+                            if ("id" in trade["clientExtensions"]):
+                                mt4id = str(trade["clientExtensions"]["id"])
 
-            # get short trades
-            response = trades.OpenTrades(static.short_account_id)
-            rv = client.request(response)
+                        if (int(trade["currentUnits"]) > 0):
+                            side = "long"
+                        else:
+                            side = "short"
 
-            for trade in rv["trades"]:
+                        currentTrades.append(str(trade["instrument"].replace("_",""))+"_"+
+                                            str(side)+"_"+
+                                            str(trade["id"])+"_"+
+                                            str(mt4id.replace("@",""))+"_"+
+                                            str(trade["openTime"].split('.')[0])+"_"+
+                                            str(trade["currentUnits"])+"_"+
+                                            str(trade["price"])+"_"+
+                                            str(trade["financing"]))
+            else:
+                # get long trades
+                response = trades.OpenTrades(static.second_account_id)
+                rv = client.request(response)
+                
+                #print(rv)
 
-                if trade["state"] == 'OPEN':
-                    mt4id = "0"
-                    if ("clientExtensions" in trade):
-                        if ("id" in trade["clientExtensions"]):
-                            mt4id = str(trade["clientExtensions"]["id"])
+                for trade in rv["trades"]:
 
-                    currentTrades.append(str(trade["instrument"].replace("_",""))+"_"+
-                                         str("short")+"_"+
-                                         str(trade["id"])+"_"+
-                                         str(mt4id.replace("@",""))+"_"+
-                                         str(trade["openTime"].split('.')[0])+"_"+
-                                         str(trade["currentUnits"])+"_"+
-                                         str(trade["price"])+"_"+
-                                         str(trade["financing"]))
+                    if trade["state"] == 'OPEN':
+                        mt4id = "0"
+                        if ("clientExtensions" in trade):
+                            if ("id" in trade["clientExtensions"]):
+                                mt4id = str(trade["clientExtensions"]["id"])
+
+                        currentTrades.append(str(trade["instrument"].replace("_",""))+"_"+
+                                            str("long")+"_"+
+                                            str(trade["id"])+"_"+
+                                            str(mt4id.replace("@",""))+"_"+
+                                            str(trade["openTime"].split('.')[0])+"_"+
+                                            str(trade["currentUnits"])+"_"+
+                                            str(trade["price"])+"_"+
+                                            str(trade["financing"]))
+
+                # get short trades
+                response = trades.OpenTrades(static.first_account_id)
+                rv = client.request(response)
+
+                for trade in rv["trades"]:
+
+                    if trade["state"] == 'OPEN':
+                        mt4id = "0"
+                        if ("clientExtensions" in trade):
+                            if ("id" in trade["clientExtensions"]):
+                                mt4id = str(trade["clientExtensions"]["id"])
+
+                        currentTrades.append(str(trade["instrument"].replace("_",""))+"_"+
+                                            str("short")+"_"+
+                                            str(trade["id"])+"_"+
+                                            str(mt4id.replace("@",""))+"_"+
+                                            str(trade["openTime"].split('.')[0])+"_"+
+                                            str(trade["currentUnits"])+"_"+
+                                            str(trade["price"])+"_"+
+                                            str(trade["financing"]))
 
             file = open(static.filepath+"FXtTrades.txt","w")
             for trade in currentTrades:
@@ -320,7 +358,7 @@ def update_positions():
                 client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             # update short positions
-            response = positions.OpenPositions(static.short_account_id)
+            response = positions.OpenPositions(static.first_account_id)
             rv = client.request(response)
             
             #print(rv["positions"])
@@ -348,32 +386,34 @@ def update_positions():
                 file.close()
 
             # update long positions
-            response = positions.OpenPositions(static.long_account_id)
-            rv = client.request(response)
-            
-            #print(rv["positions"])
-
-            for position in rv["positions"]:
-                longunits = int(position["long"]["units"])
-                shortunits = int(position["short"]["units"]) * -1
+            if (static.second_account_id != ""):
+                response = positions.OpenPositions(static.second_account_id)
+           
+                rv = client.request(response)
                 
-                if(longunits > 0):
-                    side = "buy"
-                    units = position["long"]["units"]
-                    avgPrice = position["long"]["averagePrice"]
-                    total = len(position["long"]["tradeIDs"])
-                if(shortunits > 0):
-                    side = "sell"
-                    units = abs(int(position["short"]["units"]))
-                    avgPrice = position["short"]["averagePrice"]
-                    total = len(position["short"]["tradeIDs"])
-                # create file position-EUR_USD-buy-2500-1.13041
-                file = open(static.filepath+"position-"+position.get("instrument")+"-long.txt","w")
-                file.write(side+","+
-                           str(units)+","+
-                           str(avgPrice)+","+
-                           str(total))
-                file.close()
+                #print(rv["positions"])
+
+                for position in rv["positions"]:
+                    longunits = int(position["long"]["units"])
+                    shortunits = int(position["short"]["units"]) * -1
+                    
+                    if(longunits > 0):
+                        side = "buy"
+                        units = position["long"]["units"]
+                        avgPrice = position["long"]["averagePrice"]
+                        total = len(position["long"]["tradeIDs"])
+                    if(shortunits > 0):
+                        side = "sell"
+                        units = abs(int(position["short"]["units"]))
+                        avgPrice = position["short"]["averagePrice"]
+                        total = len(position["short"]["tradeIDs"])
+                    # create file position-EUR_USD-buy-2500-1.13041
+                    file = open(static.filepath+"position-"+position.get("instrument")+"-long.txt","w")
+                    file.write(side+","+
+                            str(units)+","+
+                            str(avgPrice)+","+
+                            str(total))
+                    file.close()
 
             print("UPDATE POSITIONS: Success")
         except Exception as e:
@@ -394,41 +434,73 @@ def update_account():
         else:
             client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})        
 
-        # update short account
-        response = accounts.AccountDetails(static.short_account_id)
+        # combined account
+        if (static.second_account_id == ""):
+            # remove individual account details
+            if os.path.exists(static.filepath+"account-short.txt"):
+                os.remove(static.filepath+"account-short.txt")
+            if os.path.exists(static.filepath+"account-long.txt"):
+                os.remove(static.filepath+"account-long.txt")
 
-        try:
-            rv = client.request(response)
+            # update combined account
+            response = accounts.AccountDetails(static.first_account_id)
 
-            file = open(static.filepath+"account-short.txt","w")
-            file.write(str(rv["account"]["balance"])+","+
-                       str(rv["account"]["openTradeCount"])+","+
-                       str(rv["account"]["marginAvailable"])+","+
-                       str(rv["account"]["marginUsed"])+","+
-                       str(rv["account"]["pl"])
-                       )
-            file.close()
-        except V20Error as err:
-            print("V20Error occurred: {}".format(err))
+            try:
+                rv = client.request(response)
 
-        # update long account
-        response = accounts.AccountDetails(static.long_account_id)
+                file = open(static.filepath+"account-combined.txt","w")
+                file.write(str(rv["account"]["balance"])+","+
+                        str(rv["account"]["openTradeCount"])+","+
+                        str(rv["account"]["marginAvailable"])+","+
+                        str(rv["account"]["marginUsed"])+","+
+                        str(rv["account"]["pl"])
+                        )
+                file.close()
 
-        try:
-            rv = client.request(response)
+                print("UPDATE ACCOUNT:   Success")
+            except V20Error as err:
+                print("V20Error occurred: {}".format(err))
 
-            file = open(static.filepath+"account-long.txt","w")
-            file.write(str(rv["account"]["balance"])+","+
-                       str(rv["account"]["openTradeCount"])+","+
-                       str(rv["account"]["marginAvailable"])+","+
-                       str(rv["account"]["marginUsed"])+","+
-                       str(rv["account"]["pl"])
-                       )
-            file.close()
+        else:
+            # remove combined account details
+            if os.path.exists(static.filepath+"account-combined.txt"):
+                os.remove(static.filepath+"account-combined.txt")
+            
+            # update short account
+            response = accounts.AccountDetails(static.first_account_id)
 
-            print("UPDATE ACCOUNT:   Success")
-        except V20Error as err:
-            print("V20Error occurred: {}".format(err))
+            try:
+                rv = client.request(response)
+
+                file = open(static.filepath+"account-short.txt","w")
+                file.write(str(rv["account"]["balance"])+","+
+                        str(rv["account"]["openTradeCount"])+","+
+                        str(rv["account"]["marginAvailable"])+","+
+                        str(rv["account"]["marginUsed"])+","+
+                        str(rv["account"]["pl"])
+                        )
+                file.close()
+            except V20Error as err:
+                print("V20Error occurred: {}".format(err))
+
+            # update long account
+            response = accounts.AccountDetails(static.second_account_id)
+
+            try:
+                rv = client.request(response)
+
+                file = open(static.filepath+"account-long.txt","w")
+                file.write(str(rv["account"]["balance"])+","+
+                        str(rv["account"]["openTradeCount"])+","+
+                        str(rv["account"]["marginAvailable"])+","+
+                        str(rv["account"]["marginUsed"])+","+
+                        str(rv["account"]["pl"])
+                        )
+                file.close()
+
+                print("UPDATE ACCOUNT:   Success")
+            except V20Error as err:
+                print("V20Error occurred: {}".format(err))
         
         delete_lock_file()
 
