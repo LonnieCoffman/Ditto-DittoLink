@@ -11,7 +11,6 @@ from oandapyV20.contrib.requests import TakeProfitDetails, StopLossDetails
 from oandapyV20.exceptions import V20Error
 from datetime import datetime, timedelta
 from collections import defaultdict
-import static
 
 CLOSE_TRADE_MESSAGE = '''TRADE CLOSED:  ===============================
                   Time:  {time} EST
@@ -44,9 +43,9 @@ OPEN_TRADE_MESSAGE = '''TRADE OPENED:  ===============================
 #######################################################
 # create a lock file to prevent mt4 from accessing data
 #######################################################
-def create_lock_file():
+def create_lock_file(dir):
     try:
-        file = open(static.filepath+"bridge_lock","w")
+        file = open(dir+"\\\\bridge_lock","w")
         file.close()
     except Exception as e:
         print(e)
@@ -55,10 +54,10 @@ def create_lock_file():
 ############################
 # delete the above lock file
 ############################
-def delete_lock_file():
+def delete_lock_file(dir):
     try:
-        if os.path.isfile(static.filepath+"bridge_lock"):
-            os.remove(static.filepath+"bridge_lock")
+        if os.path.isfile(dir+"\\\\bridge_lock"):
+            os.remove(dir+"\\\\bridge_lock")
     except Exception as e:
         print(e)
     return
@@ -66,14 +65,14 @@ def delete_lock_file():
 ###############################################################################
 # create an alive check file - an EA can use this to check if script is running
 ###############################################################################
-def alive_check():
-    if not is_directory_locked():
+def alive_check(dir):
+    if not is_directory_locked(dir):
         try:
-            if not os.path.isfile(static.filepath+"alive_check"):
-                create_lock_file()
-                file = open(static.filepath+"alive_check","w")
+            if not os.path.isfile(dir+"\\\\alive_check"):
+                create_lock_file(dir)
+                file = open(dir+"\\\\alive_check","w")
                 file.close()
-                delete_lock_file()
+                delete_lock_file(dir)
         except Exception as e:
             print(e)
     return
@@ -81,25 +80,25 @@ def alive_check():
 #######################################
 # close all positions for an instrument
 #######################################
-def close_position(fn):
-    if not is_directory_locked():
+def close_position(token, filepath, filename, first_account_id, second_account_id, live_trading):
+    if not is_directory_locked(filepath):
         try:
-            _,instrument,side,numUnits = fn.split('-')
+            _,instrument,side,numUnits = filename.split('-')
 
             if (numUnits == "0"):
                 numUnits = "ALL"
 
-            if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            if (live_trading):
+                client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+                client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             if (side == "long" or side == "both"):
                 #close long positions
-                if (static.second_account_id == ""):
-                    r = positions.PositionClose(static.first_account_id, instrument, {"longUnits": numUnits})
+                if (second_account_id == ""):
+                    r = positions.PositionClose(first_account_id, instrument, {"longUnits": numUnits})
                 else:
-                    r = positions.PositionClose(static.second_account_id, instrument, {"longUnits": numUnits})
+                    r = positions.PositionClose(second_account_id, instrument, {"longUnits": numUnits})
                 try:
                     client.request(r)
                     pl = '{:,.2f}'.format(float(r.response["longOrderFillTransaction"]["pl"]))
@@ -114,7 +113,7 @@ def close_position(fn):
 
             if (side == "short" or side == "both"):
                 #close short positions
-                r = positions.PositionClose(static.first_account_id, instrument, {"shortUnits": numUnits})
+                r = positions.PositionClose(first_account_id, instrument, {"shortUnits": numUnits})
                 try:
                     client.request(r)
                     pl = '{:,.2f}'.format(float(r.response["shortOrderFillTransaction"]["pl"]))
@@ -127,10 +126,6 @@ def close_position(fn):
                 except V20Error as err:
                     print("V20Error occurred: {}".format(err))
 
-            # delete entry file
-            if os.path.isfile(static.filepath+'entry-'+side+'-'+instrument+'.txt'):
-                os.remove(static.filepath+'entry-'+side+'-'+instrument+'.txt')
-
         except Exception as e:
             print(e)
     return
@@ -138,43 +133,50 @@ def close_position(fn):
 #######################################
 # close trade
 #######################################
-def close_trade(fn):
-    if not is_directory_locked():
+def close_trade(token, filepath, filename, first_account_id, second_account_id, live_trading):
+    if not is_directory_locked(filepath):
         try:
-            _,tradeID,side,numUnits = fn.split('-')
+            _,tradeID,side,numUnits = filename.split('-')
 
             if (numUnits == "0"):
                 numUnits = "ALL"
 
-            if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            if (live_trading):
+                client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+                client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             if (side == "short"):
-                r = trades.TradeClose(static.first_account_id,tradeID,{"units": numUnits})
+                r = trades.TradeClose(first_account_id,tradeID,{"units": numUnits})
             else:
-                if (static.second_account_id == ""):
-                    r = trades.TradeClose(static.first_account_id,tradeID,{"units": numUnits})
+                if (second_account_id == ""):
+                    r = trades.TradeClose(first_account_id,tradeID,{"units": numUnits})
                 else:
-                    r = trades.TradeClose(static.second_account_id,tradeID,{"units": numUnits})
+                    r = trades.TradeClose(second_account_id,tradeID,{"units": numUnits})
 
             try:
                 rv = client.request(r)
-                #print(rv)
+                # print(rv)
 
-                pl = '{:,.2f}'.format(float(rv["orderFillTransaction"]["pl"]))
-                units = abs(int(rv["orderFillTransaction"]["units"]))
-                time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
-                instrument = rv["orderFillTransaction"]["instrument"]
-                mt4id = rv["orderFillTransaction"]["tradesClosed"][0]["clientTradeID"].replace("@","")
-                fxtid = rv["orderFillTransaction"]["tradesClosed"][0]["tradeID"]
-
-                if (numUnits == "ALL"):
-                     print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, mt4id=mt4id, fxtid=fxtid, pl=pl))
+                if "orderCancelTransaction" in rv:
+                    reason = rv["orderCancelTransaction"]["reason"]
+                
+                    print("NOTICE: "+reason)
+                    print("DETAILS: "+rv["orderCreateTransaction"]["instrument"]+"|"+side+"|"+rv["orderCreateTransaction"]["units"]+"| #"+rv["orderCreateTransaction"]["tradeClose"]["tradeID"])
                 else:
-                     print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, nt4id=mt4id, fxtid=fxtid, pl=pl))
-            
+
+                    pl = '{:,.2f}'.format(float(rv["orderFillTransaction"]["pl"]))
+                    units = abs(int(rv["orderFillTransaction"]["units"]))
+                    time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
+                    instrument = rv["orderFillTransaction"]["instrument"]
+                    mt4id = rv["orderFillTransaction"]["tradesClosed"][0]["clientTradeID"].replace("@","")
+                    fxtid = rv["orderFillTransaction"]["tradesClosed"][0]["tradeID"]
+
+                    if (numUnits == "ALL"):
+                        print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, mt4id=mt4id, fxtid=fxtid, pl=pl))
+                    else:
+                        print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, nt4id=mt4id, fxtid=fxtid, pl=pl))
+                
             except V20Error as err:
                 print("V20Error occurred: {}".format(err))
 
@@ -185,10 +187,10 @@ def close_trade(fn):
 ###################
 # open market order
 ###################
-def open_trade(fn):
-    if not is_directory_locked():
+def open_trade(token, filepath, filename, first_account_id, second_account_id, live_trading):
+    if not is_directory_locked(filepath):
         try:
-            _,pair,side,size,mt4TradeID = fn.split('-')
+            _,pair,side,size,mt4TradeID = filename.split('-')
 
             size = int(size)
 
@@ -203,18 +205,18 @@ def open_trade(fn):
                 units = str(size),
                 tradeClientExtensions = modOrder.data)
 
-            if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            if (live_trading):
+                client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+                client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
             
             if (side == "short"):
-                r = orders.OrderCreate(static.first_account_id,data=mktOrder.data)
+                r = orders.OrderCreate(first_account_id,data=mktOrder.data)
             else:
-                if (static.second_account_id == ""):
-                    r = orders.OrderCreate(static.first_account_id,data=mktOrder.data)
+                if (second_account_id == ""):
+                    r = orders.OrderCreate(first_account_id,data=mktOrder.data)
                 else:
-                    r = orders.OrderCreate(static.second_account_id,data=mktOrder.data)
+                    r = orders.OrderCreate(second_account_id,data=mktOrder.data)
 
             try:
                 rv = client.request(r)
@@ -242,25 +244,25 @@ def open_trade(fn):
 # get Trade ID's
 ###########################################
 
-def update_trade_data(updateNow = False):
+def update_trade_data(token, filepath, first_account_id, second_account_id, live_trading, updateNow = False):
 
-    if not is_directory_locked():
+    if not is_directory_locked(filepath):
         try:
             # delete all current positions prior to update
-            for fn in os.listdir(static.filepath): # loop through files in directory
+            for fn in os.listdir(filepath+"\\\\"): # loop through files in directory
                 if 'FXtTrades.txt' in fn:
-                    os.remove(static.filepath+fn)
+                    os.remove(filepath+"\\\\"+fn)
 
-            if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            if (live_trading):
+                client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+                client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             currentTrades = []
             
-            if (static.second_account_id == ""):
+            if (second_account_id == ""):
                 # get combined
-                response = trades.OpenTrades(static.first_account_id)
+                response = trades.OpenTrades(first_account_id)
                 rv = client.request(response)
 
                 #print(rv)
@@ -288,7 +290,7 @@ def update_trade_data(updateNow = False):
                                             str(trade["financing"]))
             else:
                 # get long trades
-                response = trades.OpenTrades(static.second_account_id)
+                response = trades.OpenTrades(second_account_id)
                 rv = client.request(response)
                 
                 #print(rv)
@@ -311,7 +313,7 @@ def update_trade_data(updateNow = False):
                                             str(trade["financing"]))
 
                 # get short trades
-                response = trades.OpenTrades(static.first_account_id)
+                response = trades.OpenTrades(first_account_id)
                 rv = client.request(response)
 
                 for trade in rv["trades"]:
@@ -331,7 +333,7 @@ def update_trade_data(updateNow = False):
                                             str(trade["price"])+"_"+
                                             str(trade["financing"]))
 
-            file = open(static.filepath+"FXtTrades.txt","w")
+            file = open(filepath+"\\\\FXtTrades.txt","w")
             for trade in currentTrades:
                 file.write(str(trade+"\n"))
             file.close()
@@ -342,23 +344,23 @@ def update_trade_data(updateNow = False):
 ######################
 # update all positions
 ######################
-def update_positions():
+def update_positions(token, filepath, first_account_id, second_account_id, live_trading):
 
-    if not is_directory_locked():
-        create_lock_file()
+    if not is_directory_locked(filepath):
+        create_lock_file(filepath)
         try:
             # delete all current positions prior to update
-            for fn in os.listdir(static.filepath): # loop through files in directory
+            for fn in os.listdir(filepath+"\\\\"): # loop through files in directory
                 if 'position-' in fn:
-                    os.remove(static.filepath+fn)
+                    os.remove(filepath+"\\\\"+fn)
 
-            if (static.live_trading):
-                client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            if (live_trading):
+                client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
             else:
-                client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+                client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
 
             # update short positions
-            response = positions.OpenPositions(static.first_account_id)
+            response = positions.OpenPositions(first_account_id)
             rv = client.request(response)
             
             #print(rv["positions"])
@@ -378,7 +380,11 @@ def update_positions():
                     avgPrice = position["short"]["averagePrice"]
                     total = len(position["short"]["tradeIDs"])
                 # create file position-EUR_USD-buy-2500-1.13041
-                file = open(static.filepath+"position-"+position.get("instrument")+"-short.txt","w")
+                if side == "sell":
+                    direction = "short"
+                else:
+                    direction = "long"
+                file = open(filepath+"\\\\position-"+position.get("instrument")+"-"+direction+".txt","w")
                 file.write(side+","+
                            str(units)+","+
                            str(avgPrice)+","+
@@ -386,8 +392,8 @@ def update_positions():
                 file.close()
 
             # update long positions
-            if (static.second_account_id != ""):
-                response = positions.OpenPositions(static.second_account_id)
+            if (second_account_id != ""):
+                response = positions.OpenPositions(second_account_id)
            
                 rv = client.request(response)
                 
@@ -408,7 +414,7 @@ def update_positions():
                         avgPrice = position["short"]["averagePrice"]
                         total = len(position["short"]["tradeIDs"])
                     # create file position-EUR_USD-buy-2500-1.13041
-                    file = open(static.filepath+"position-"+position.get("instrument")+"-long.txt","w")
+                    file = open(filepath+"\\\\position-"+position.get("instrument")+"-long.txt","w")
                     file.write(side+","+
                             str(units)+","+
                             str(avgPrice)+","+
@@ -418,37 +424,37 @@ def update_positions():
             print("UPDATE POSITIONS: Success")
         except Exception as e:
             print(e)
-        delete_lock_file()
+        delete_lock_file(filepath)
     return
 
 ########################
 # update account details
 ########################
-def update_account():
+def update_account(token, filepath, first_account_id, second_account_id, live_trading):
 
-    if not is_directory_locked():
-        create_lock_file()
+    if not is_directory_locked(filepath):
+        create_lock_file(filepath)
 
-        if (static.live_trading):
-            client = oandapyV20.API(static.token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+        if (live_trading):
+            client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
         else:
-            client = oandapyV20.API(static.token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})        
+            client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})        
 
         # combined account
-        if (static.second_account_id == ""):
+        if (second_account_id == ""):
             # remove individual account details
-            if os.path.exists(static.filepath+"account-short.txt"):
-                os.remove(static.filepath+"account-short.txt")
-            if os.path.exists(static.filepath+"account-long.txt"):
-                os.remove(static.filepath+"account-long.txt")
+            if os.path.exists(filepath+"\\\\account-short.txt"):
+                os.remove(filepath+"\\\\account-short.txt")
+            if os.path.exists(filepath+"\\\\account-long.txt"):
+                os.remove(filepath+"\\\\account-long.txt")
 
             # update combined account
-            response = accounts.AccountDetails(static.first_account_id)
+            response = accounts.AccountDetails(first_account_id)
 
             try:
                 rv = client.request(response)
 
-                file = open(static.filepath+"account-combined.txt","w")
+                file = open(filepath+"\\\\account-combined.txt","w")
                 file.write(str(rv["account"]["balance"])+","+
                         str(rv["account"]["openTradeCount"])+","+
                         str(rv["account"]["marginAvailable"])+","+
@@ -463,16 +469,16 @@ def update_account():
 
         else:
             # remove combined account details
-            if os.path.exists(static.filepath+"account-combined.txt"):
-                os.remove(static.filepath+"account-combined.txt")
+            if os.path.exists(filepath+"\\\\account-combined.txt"):
+                os.remove(filepath+"\\\\account-combined.txt")
             
             # update short account
-            response = accounts.AccountDetails(static.first_account_id)
+            response = accounts.AccountDetails(first_account_id)
 
             try:
                 rv = client.request(response)
 
-                file = open(static.filepath+"account-short.txt","w")
+                file = open(filepath+"\\\\account-short.txt","w")
                 file.write(str(rv["account"]["balance"])+","+
                         str(rv["account"]["openTradeCount"])+","+
                         str(rv["account"]["marginAvailable"])+","+
@@ -484,12 +490,12 @@ def update_account():
                 print("V20Error occurred: {}".format(err))
 
             # update long account
-            response = accounts.AccountDetails(static.second_account_id)
+            response = accounts.AccountDetails(second_account_id)
 
             try:
                 rv = client.request(response)
 
-                file = open(static.filepath+"account-long.txt","w")
+                file = open(filepath+"\\\\account-long.txt","w")
                 file.write(str(rv["account"]["balance"])+","+
                         str(rv["account"]["openTradeCount"])+","+
                         str(rv["account"]["marginAvailable"])+","+
@@ -502,17 +508,17 @@ def update_account():
             except V20Error as err:
                 print("V20Error occurred: {}".format(err))
         
-        delete_lock_file()
+        delete_lock_file(filepath)
 
     return
 
 #############################
 # is directory locked by MT4?
 #############################
-def is_directory_locked():
+def is_directory_locked(dir):
     locked = False
     try:
-        if os.path.isfile(static.filepath+'MT4-Locked'):
+        if os.path.isfile(dir+'\\\\MT4-Locked'):
             locked = True
     except Exception as e:
         print(e)
