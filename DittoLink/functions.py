@@ -12,32 +12,32 @@ from oandapyV20.exceptions import V20Error
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-CLOSE_TRADE_MESSAGE = '''TRADE CLOSED:  ===============================
-                  Time:  {time} EST
-                  Pair:  {instrument}
-                  Units: {units} ({direction})
-                  FXtID: {fxtid}
-                  MT4ID: {mt4id}
-                  P/L:  ${pl}
+CLOSE_TRADE_MESSAGE = '''{system}: TRADE CLOSED: {dashes}
+                  Time:   {time} EST
+                  Pair:   {instrument}
+                  Units:  {units} ({direction})
+                  FXtID:  {fxtid}
+                  MT4ID:  {mt4id}
+                  P/L:   ${pl}
                   ==============================='''
-CLOSE_POSITION_MESSAGE = '''POSITION CLOSED:  ===============================
-                  Time:  {time} EST
-                  Pair:  {instrument}
-                  Units: {units} ({direction})
-                  P/L:  ${pl}
+CLOSE_POSITION_MESSAGE = '''{system}: POSITION CLOSED: {dashes}
+                  Time:   {time} EST
+                  Pair:   {instrument}
+                  Units:  {units} ({direction})
+                  P/L:   ${pl}
                   ==============================='''
-CLOSE_PARTIAL_MESSAGE = '''PARTIAL CLOSE:  ===============================
-                  Time:  {time} EST
-                  Pair:  {instrument}
-                  Units: {units} ({direction})
-                  P/L:  ${pl}
+CLOSE_PARTIAL_MESSAGE = '''{system}: PARTIAL CLOSE: {dashes}
+                  Time:   {time} EST
+                  Pair:   {instrument}
+                  Units:  {units} ({direction})
+                  P/L:   ${pl}
                   ==============================='''
-OPEN_TRADE_MESSAGE = '''TRADE OPENED:  ===============================
-                  Time:  {time} EST
-                  Pair:  {instrument}
-                  Units: {units} ({direction})
-                  FXtID: {fxtid}
-                  MT4ID: {mt4id}
+OPEN_TRADE_MESSAGE = '''{system}: TRADE OPENED: {dashes}
+                  Time:   {time} EST
+                  Pair:   {instrument}
+                  Units:  {units} ({direction})
+                  FXtID:  {fxtid}
+                  MT4ID:  {mt4id}
                   ==============================='''
 
 #######################################################
@@ -80,7 +80,7 @@ def alive_check(dir):
 #######################################
 # close all positions for an instrument
 #######################################
-def close_position(token, filepath, filename, first_account_id, second_account_id, live_trading):
+def close_position(token, filepath, filename, first_account_id, second_account_id, live_trading, system):
     if not is_directory_locked(filepath):
         try:
             _,instrument,side,numUnits = filename.split('-')
@@ -105,9 +105,11 @@ def close_position(token, filepath, filename, first_account_id, second_account_i
                     units = abs(int(r.response["longOrderFillTransaction"]["units"]))
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
                     if (numUnits == "ALL"):
-                        print(CLOSE_POSITION_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, pl=pl))
+                        dashes = (50-19-(len(system)))*"="
+                        print(CLOSE_POSITION_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, pl=pl))
                     else:
-                        print(CLOSE_PARTIAL_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, pl=pl))
+                        dashes = (50-17-(len(system)))*"="
+                        print(CLOSE_PARTIAL_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, pl=pl))
                 except V20Error as err:
                     print("V20Error occurred: {}".format(err))
 
@@ -120,9 +122,11 @@ def close_position(token, filepath, filename, first_account_id, second_account_i
                     units = abs(int(r.response["shortOrderFillTransaction"]["units"]))
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
                     if (numUnits == "ALL"):
-                        print(CLOSE_POSITION_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, pl=pl))
+                        dashes = (50-19-(len(system)))*"="
+                        print(CLOSE_POSITION_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, pl=pl))
                     else:
-                        print(CLOSE_PARTIAL_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, pl=pl))
+                        dashes = (50-17-(len(system)))*"="
+                        print(CLOSE_PARTIAL_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, pl=pl))
                 except V20Error as err:
                     print("V20Error occurred: {}".format(err))
 
@@ -133,7 +137,7 @@ def close_position(token, filepath, filename, first_account_id, second_account_i
 #######################################
 # close trade
 #######################################
-def close_trade(token, filepath, filename, first_account_id, second_account_id, live_trading):
+def close_trade(token, filepath, filename, first_account_id, second_account_id, live_trading, system):
     if not is_directory_locked(filepath):
         try:
             _,tradeID,side,numUnits = filename.split('-')
@@ -173,9 +177,11 @@ def close_trade(token, filepath, filename, first_account_id, second_account_id, 
                     fxtid = rv["orderFillTransaction"]["tradesClosed"][0]["tradeID"]
 
                     if (numUnits == "ALL"):
-                        print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, mt4id=mt4id, fxtid=fxtid, pl=pl))
+                        dashes = (50-16-(len(system)))*"="
+                        print(CLOSE_TRADE_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, mt4id=mt4id, fxtid=fxtid, pl=pl))
                     else:
-                        print(CLOSE_TRADE_MESSAGE.format(time=time, instrument=instrument, direction = side, units=units, nt4id=mt4id, fxtid=fxtid, pl=pl))
+                        dashes = (50-16-(len(system)))*"="
+                        print(CLOSE_TRADE_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, nt4id=mt4id, fxtid=fxtid, pl=pl))
                 
             except V20Error as err:
                 print("V20Error occurred: {}".format(err))
@@ -187,7 +193,7 @@ def close_trade(token, filepath, filename, first_account_id, second_account_id, 
 ###################
 # open market order
 ###################
-def open_trade(token, filepath, filename, first_account_id, second_account_id, live_trading):
+def open_trade(token, filepath, filename, first_account_id, second_account_id, live_trading, system):
     if not is_directory_locked(filepath):
         try:
             _,pair,side,size,mt4TradeID = filename.split('-')
@@ -231,7 +237,8 @@ def open_trade(token, filepath, filename, first_account_id, second_account_id, l
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
                     fxtid = int(rv["orderFillTransaction"]["tradeOpened"]["tradeID"])
                     mt4id = rv["orderFillTransaction"]["tradeOpened"]["clientExtensions"]["id"].replace("@","")
-                    print(OPEN_TRADE_MESSAGE.format(time=time, instrument=pair, direction=side, units=units, fxtid=fxtid, mt4id=mt4id))
+                    dashes = (50-16-(len(system)))*"="
+                    print(OPEN_TRADE_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=pair, direction=side, units=units, fxtid=fxtid, mt4id=mt4id))
                 
             except V20Error as err:
                 print("V20Error occurred: {}".format(err))
@@ -344,7 +351,7 @@ def update_trade_data(token, filepath, first_account_id, second_account_id, live
 ######################
 # update all positions
 ######################
-def update_positions(token, filepath, first_account_id, second_account_id, live_trading):
+def update_positions(token, filepath, first_account_id, second_account_id, live_trading, system):
 
     if not is_directory_locked(filepath):
         create_lock_file(filepath)
@@ -421,7 +428,7 @@ def update_positions(token, filepath, first_account_id, second_account_id, live_
                             str(total))
                     file.close()
 
-            print("UPDATE POSITIONS: Success")
+            print(system+": UPDATE POSITIONS: Success")
         except Exception as e:
             print(e)
         delete_lock_file(filepath)
@@ -430,7 +437,7 @@ def update_positions(token, filepath, first_account_id, second_account_id, live_
 ########################
 # update account details
 ########################
-def update_account(token, filepath, first_account_id, second_account_id, live_trading):
+def update_account(token, filepath, first_account_id, second_account_id, live_trading, system):
 
     if not is_directory_locked(filepath):
         create_lock_file(filepath)
@@ -463,10 +470,13 @@ def update_account(token, filepath, first_account_id, second_account_id, live_tr
                         )
                 file.close()
 
-                print("UPDATE ACCOUNT:   Success")
+                print(system+": UPDATE ACCOUNT:   Success")
             except V20Error as err:
-                print("V20Error occurred: {}".format(err))
-
+                # if there was an error with account record message in error.txt. this will stop all activity in this account.
+                print(err)
+                file = open(filepath+"\\\\error.txt","w")
+                file.write(str(err))
+                file.close()
         else:
             # remove combined account details
             if os.path.exists(filepath+"\\\\account-combined.txt"):
@@ -504,7 +514,7 @@ def update_account(token, filepath, first_account_id, second_account_id, live_tr
                         )
                 file.close()
 
-                print("UPDATE ACCOUNT:   Success")
+                print(system+": UPDATE ACCOUNT:   Success")
             except V20Error as err:
                 print("V20Error occurred: {}".format(err))
         

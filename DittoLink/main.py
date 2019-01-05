@@ -8,12 +8,16 @@ import time, datetime
 import configparser
 import msvcrt
 
+#pyinstaller main.py -F -i icon.ico --path C:\Windows\SysWOW64\downlevel --hidden-import requests --hidden-import oandapyV20 --hidden-import six --hidden-import importlib
+
 alive_timer = 1
 
-def update_data(token, filepath, first_account_id, second_account_id, live_trading):
-    bridge.update_account(token, filepath, first_account_id, second_account_id, live_trading)
-    bridge.update_positions(token, filepath, first_account_id, second_account_id, live_trading)
-    bridge.update_trade_data(token, filepath, first_account_id, second_account_id, live_trading)
+def update_data(token, filepath, first_account_id, second_account_id, live_trading, system):
+    bridge.update_account(token, filepath, first_account_id, second_account_id, live_trading, system)
+    # if there is an error with the account, do not continue
+    if not os.path.isfile(path+"\\\\error.txt"):
+        bridge.update_positions(token, filepath, first_account_id, second_account_id, live_trading, system)
+        bridge.update_trade_data(token, filepath, first_account_id, second_account_id, live_trading)
     return
 
 def remove_files(filepath, fn):
@@ -36,120 +40,143 @@ except Exception as e:
     print(e)
     exit()
 
-# parse filepath to MT4 Data Folder
+terminals = []
+
+# parse filepath to MT4 Data Folders
 path = configparser.ConfigParser()
 path.sections()
 path.read('config.ini')
-filefolder = str(path['settings']['MT4DataFolder']).replace("\\","\\\\")+"\\\\mql4\\\\Files"
-try:
-    if not os.path.isdir(filefolder):
-        print("MT4 Data Folder does not exist. Please check your path and rerun DittoLink.")
-        print("Press any key to exit")
-        while(True):
-            if msvcrt.kbhit():
-                exit()
-except Exception as e:
-    print(e)
-    exit()
-
-# if Ditto folder does not exist then create it
-filepath = str(path['settings']['MT4DataFolder']).replace("\\","\\\\")+"\\\\mql4\\\\Files\\\\Ditto\\\\"
-try:
-    if not os.path.isdir(filepath):
-        try:
-            os.mkdir(filepath)
-        except OSError:
-            print("Error encountered creating Ditto folder. Run the Ditto EA and then rerun DittoLink.")
+filefolder = str(path['settings']['MT4DataFolder'])
+if (filefolder == ""):
+    print("You have not added any terminals. Add a path to the config.ini file and rerun DittoLink.")
+    print("Press any key to exit")
+    while(True):
+        if msvcrt.kbhit():
+            exit()
+tempTerminals = filefolder.split(",")
+for tempTerminal in tempTerminals:
+    tempTerminal = tempTerminal.replace('"','') # remove quotes
+    tempTerminal = tempTerminal.strip()         # remove any whitespace at beginning or end
+    tempTerminal = tempTerminal.replace("\\","\\\\")+"\\\\mql4\\\\Files" # format string and add files folder at end
+    try:
+        if not os.path.isdir(tempTerminal):
+            print(tempTerminal+" Does not exist please check your path and rerun DittoLink.")
             print("Press any key to exit")
             while(True):
                 if msvcrt.kbhit():
                     exit()
-except Exception as e:
-    print(e)
-    exit()
+    except Exception as e:
+        print(e)
+        exit()
+
+    # if Ditto folder does not exist then create it
+    try:
+        if not os.path.isdir(tempTerminal+"\\\\Ditto\\\\"):
+            try:
+                os.mkdir(tempTerminal+"\\\\Ditto\\\\")
+            except OSError:
+                print("Error encountered creating Ditto folder in "+tempTerminal+".")
+                print("Run the Ditto EA and then rerun DittoLink.")
+                print("Press any key to exit")
+                while(True):
+                    if msvcrt.kbhit():
+                        exit()
+    except Exception as e:
+        print(e)
+        exit()
+
+    # add cleaned terminal to terminals array
+    terminals.append(tempTerminal+"\\\\Ditto\\\\")
 
 firstRun = True
 
 # run until exited
 while True:
 
-    # loop through directories
-    for root, dirs, files in os.walk(filepath):
-        for dir in dirs:
-            
-            path = root+dir
-            
-            # check if config file exists
-            if os.path.isfile(path+"\\\\config.ini"):
+    # loop through terminals
+    for terminal in terminals:
+
+        # loop through directories
+        for root, dirs, files in os.walk(terminal):
+            for dir in dirs:
                 
-                # config file exists, so parse it.
-                expert = configparser.ConfigParser()
-                expert.sections()
-                expert.read(path+"\\\\config.ini")
+                path = root+dir
 
-                # assign variables
-                first_account_id = str(expert['settings']['first_account_id'])
-                second_account_id = str(expert['settings']['second_account_id'])
-                access_token = str(expert['settings']['token'])
-                live_trading = True if expert['settings']['live_trading'] == "True" else False
+                # check if config file exists
+                if os.path.isfile(path+"\\\\config.ini"):
+                    
+                    # account error, do not continue with this system
+                    if not os.path.isfile(path+"\\\\error.txt"):
 
-                # dual account?
-                if (second_account_id == ""):
-                    dual_account = False
-                else:
-                    dual_account = True
+                        # config file exists, so parse it.
+                        expert = configparser.ConfigParser()
+                        expert.sections()
+                        expert.read(path+"\\\\config.ini")
 
-                # set API client and token
-                if (live_trading):
-                    client = oandapyV20.API(access_token=access_token, environment='live')
-                else:
-                    client = oandapyV20.API(access_token=access_token, environment='practice')
+                        # assign variables
+                        system = str(expert['settings']['system_name'])
+                        first_account_id = str(expert['settings']['first_account_id'])
+                        second_account_id = str(expert['settings']['second_account_id'])
+                        access_token = str(expert['settings']['token'])
+                        live_trading = True if expert['settings']['live_trading'] == "True" else False
 
-                # create alive check file
-                if (datetime.datetime.now().second % alive_timer == 0):
-                    bridge.alive_check(path)
-                
-                # on first run update data
-                if (firstRun):
-                    update_data(access_token, path, first_account_id, second_account_id, live_trading)
+                        # dual account?
+                        if (second_account_id == ""):
+                            dual_account = False
+                        else:
+                            dual_account = True
 
-                # if account or trade files do not exist then create them.
-                tradeFileExists = False
-                accountFileExists = False
+                        # set API client and token
+                        if (live_trading):
+                            client = oandapyV20.API(access_token=access_token, environment='live')
+                        else:
+                            client = oandapyV20.API(access_token=access_token, environment='practice')
 
-                for fn in os.listdir(path+"\\\\"): # loop through files in directory
-                    if 'FXtTrades.txt' in fn:
-                        tradeFileExists = True
-                    elif dual_account and 'account-short.txt' in fn:
-                        accountFileExists = True
-                    elif not dual_account and 'account-combined.txt' in fn:
-                        accountFileExists = True
-                
-                # create missing files
-                if not tradeFileExists or not accountFileExists:
-                    update_data(access_token, path, first_account_id, second_account_id, live_trading)
+                        # create alive check file
+                        if (datetime.datetime.now().second % alive_timer == 0):
+                            bridge.alive_check(path)
+                        
+                        # on first run update data
+                        if (firstRun):
+                            update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
 
-                # # watch for files
-                for fn in os.listdir(path+"\\\\"): # loop through files in directory
-                    if 'updateTradeData' in fn:
-                        bridge.create_lock_file(path)
-                        bridge.update_trade_data(access_token, path, first_account_id, second_account_id, live_trading)
-                        remove_files(path, fn)
-                    elif 'openmarket-' in fn:
-                        bridge.create_lock_file(path)
-                        bridge.open_trade(access_token, path, fn, first_account_id, second_account_id, live_trading)
-                        update_data(access_token, path, first_account_id, second_account_id, live_trading)
-                        remove_files(path, fn)
-                    elif 'closeTrade-' in fn:
-                        bridge.create_lock_file(path)
-                        bridge.close_trade(access_token, path, fn, first_account_id, second_account_id, live_trading)
-                        update_data(access_token, path, first_account_id, second_account_id, live_trading)
-                        remove_files(path, fn)
-                    elif 'closePosition-' in fn:
-                        bridge.create_lock_file(path)
-                        bridge.close_position(access_token, path, fn, first_account_id, second_account_id, live_trading)
-                        update_data(access_token, path, first_account_id, second_account_id, live_trading)
-                        remove_files(path, fn)
+                        # if account or trade files do not exist then create them.
+                        tradeFileExists = False
+                        accountFileExists = False
+
+                        for fn in os.listdir(path+"\\\\"): # loop through files in directory
+                            if 'FXtTrades.txt' in fn:
+                                tradeFileExists = True
+                            elif dual_account and 'account-short.txt' in fn:
+                                accountFileExists = True
+                            elif not dual_account and 'account-combined.txt' in fn:
+                                accountFileExists = True
+                        
+                        # create missing files
+                        if not tradeFileExists or not accountFileExists:
+                            update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
+
+                        # # watch for files
+                        for fn in os.listdir(path+"\\\\"): # loop through files in directory
+                            if 'updateTradeData' in fn:
+                                bridge.create_lock_file(path)
+                                bridge.update_trade_data(access_token, path, first_account_id, second_account_id, live_trading)
+                                remove_files(path, fn)
+                            elif 'openmarket-' in fn:
+                                bridge.create_lock_file(path)
+                                bridge.open_trade(access_token, path, fn, first_account_id, second_account_id, live_trading, system)
+                                update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
+                                remove_files(path, fn)
+                            elif 'closeTrade-' in fn:
+                                bridge.create_lock_file(path)
+                                bridge.close_trade(access_token, path, fn, first_account_id, second_account_id, live_trading, system)
+                                update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
+                                remove_files(path, fn)
+                            elif 'closePosition-' in fn:
+                                bridge.create_lock_file(path)
+                                bridge.close_position(access_token, path, fn, first_account_id, second_account_id, live_trading, system)
+                                update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
+                                remove_files(path, fn)
 
     firstRun = False
                 
