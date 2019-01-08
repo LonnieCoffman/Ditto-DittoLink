@@ -5,7 +5,7 @@ import oandapyV20.endpoints.accounts as accounts
 import oandapyV20.endpoints.positions as positions
 import oandapyV20.endpoints.trades as trades
 import oandapyV20.endpoints.orders as orders
-from oandapyV20.contrib.requests import MarketOrderRequest
+from oandapyV20.contrib.requests import MarketOrderRequest, StopOrderRequest, LimitOrderRequest
 from oandapyV20.contrib.requests import ClientExtensions
 from oandapyV20.contrib.requests import TakeProfitDetails, StopLossDetails
 from oandapyV20.exceptions import V20Error
@@ -36,6 +36,22 @@ OPEN_TRADE_MESSAGE = '''{system}: TRADE OPENED: {dashes}
                   Time:   {time} EST
                   Pair:   {instrument}
                   Units:  {units} ({direction})
+                  FXtID:  {fxtid}
+                  MT4ID:  {mt4id}
+                  ==============================='''
+OPEN_PENDING_MESSAGE = '''{system}: PENDING ORDER PLACED: {dashes}
+                  Time:   {time} EST
+                  Type:   {pendingType}
+                  Pair:   {instrument}
+                  Units:  {units} @ {price}
+                  FXtID:  {fxtid}
+                  MT4ID:  {mt4id}
+                  ==============================='''
+CLOSE_PENDING_MESSAGE = '''{system}: PENDING ORDER CANCELLED: {dashes}
+                  Time:   {time} EST
+                  Type:   {pendingType}
+                  Pair:   {instrument}
+                  Units:  {units}
                   FXtID:  {fxtid}
                   MT4ID:  {mt4id}
                   ==============================='''
@@ -190,6 +206,124 @@ def close_trade(token, filepath, filename, first_account_id, second_account_id, 
             print(e)
     return
 
+########################
+# cancel a pending order
+########################
+def cancel_pending(token, filepath, filename, first_account_id, second_account_id, live_trading, system):
+    if not is_directory_locked(filepath):
+        try:
+            # cancelPending-buy-limit-AUD_USD-200-4235-204560842
+            _,side,pendingType,pair,size,tradeID,mt4TradeID = filename.split('-')
+            
+            if (live_trading):
+                client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            else:
+                client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+
+            if (side == "short"):
+                r = orders.OrderCancel(first_account_id,tradeID)
+            else:
+                if (second_account_id == ""):
+                    r = orders.OrderCancel(first_account_id,tradeID)
+                else:
+                    r = orders.OrderCancel(second_account_id,tradeID)
+            
+            try:
+                rv = client.request(r)
+                # print(rv)
+
+                if "orderCancelRejectTransaction" in rv:
+                    reason = rv["orderCancelRejectTransaction"]["rejectReason"]
+                
+                    print("NOTICE: "+reason)
+                    print("DETAILS: "+rv["orderCancelRejectTransaction"]["orderID"])
+                else:
+                    units = size
+                    time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
+                    instrument = pair
+                    mt4id = mt4TradeID
+                    fxtid = tradeID
+
+                    dashes = (50-27-(len(system)))*"="
+                    print(CLOSE_PENDING_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, pendingType=side+pendingType, units=units, mt4id=mt4id, fxtid=fxtid))
+
+
+            except V20Error as err:
+                print("V20Error occurred: {}".format(err))
+
+        except Exception as e:
+            print(e)
+    return
+
+####################
+# place a pending order
+####################
+def place_pending(token, filepath, filename, first_account_id, second_account_id, live_trading, system):
+    if not is_directory_locked(filepath):
+        try:
+            _,side,pendingType,pair,size,price,mt4TradeID = filename.split('-')
+            
+            price = price.replace("_",".")
+            size = int(size)
+
+            modOrder = ClientExtensions(
+                clientID = "@"+mt4TradeID)
+
+            if (side == "sell"):
+                size = str(size * -1)
+
+            if (pendingType == 'stop'):
+                pendingOrder = StopOrderRequest(
+                    instrument = str(pair),
+                    units = str(size),
+                    price = str(price),
+                    tradeClientExtensions = modOrder.data)
+
+            if (pendingType == 'limit'):
+                pendingOrder = LimitOrderRequest(
+                    instrument = str(pair),
+                    units = str(size),
+                    price = str(price),
+                    tradeClientExtensions = modOrder.data)
+
+            if (live_trading):
+                client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
+            else:
+                client = oandapyV20.API(token, environment='practice',headers={"Accept-Datetime-Format":"Unix"})
+
+            if (side == "short"):
+                r = orders.OrderCreate(first_account_id,data=pendingOrder.data)
+            else:
+                if (second_account_id == ""):
+                    r = orders.OrderCreate(first_account_id,data=pendingOrder.data)
+                else:
+                    r = orders.OrderCreate(second_account_id,data=pendingOrder.data)
+
+            try:
+                rv = client.request(r)
+
+                if "orderCancelTransaction" in rv:
+                    reason = rv["orderCancelTransaction"]["reason"]
+                
+                    print("NOTICE: "+reason)
+                    print("DETAILS: "+pair+"|"+side+"|"+str(size)+"|"+mt4TradeID)
+                else:
+                    units = abs(int(rv["orderCreateTransaction"]["units"]))
+                    time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
+                    fxtid = int(rv["orderCreateTransaction"]["id"])
+                    mt4id = rv["orderCreateTransaction"]["tradeClientExtensions"]["id"].replace("@","")
+                    pendingPrice = rv["orderCreateTransaction"]["price"]
+                    dashes = (50-24-(len(system)))*"="
+                    print(OPEN_PENDING_MESSAGE.format(dashes=dashes, system=system, time=time, pendingType=side+pendingType, price=pendingPrice, instrument=pair, units=units, fxtid=fxtid, mt4id=mt4id))
+
+            except V20Error as err:
+                print("V20Error occurred: {}".format(err))
+        except Exception as e:
+            print(e)
+    return
+
+
+
 ###################
 # open market order
 ###################
@@ -226,7 +360,7 @@ def open_trade(token, filepath, filename, first_account_id, second_account_id, l
 
             try:
                 rv = client.request(r)
-                
+               
                 if "orderCancelTransaction" in rv:
                     reason = rv["orderCancelTransaction"]["reason"]
                 
@@ -269,10 +403,9 @@ def update_trade_data(token, filepath, first_account_id, second_account_id, live
             
             if (second_account_id == ""):
                 # get combined
+                # get trades
                 response = trades.OpenTrades(first_account_id)
                 rv = client.request(response)
-
-                #print(rv)
 
                 for trade in rv["trades"]:
 
@@ -295,6 +428,43 @@ def update_trade_data(token, filepath, first_account_id, second_account_id, live
                                             str(trade["currentUnits"])+"_"+
                                             str(trade["price"])+"_"+
                                             str(trade["financing"]))
+                
+                # get orders
+                response = orders.OrdersPending(first_account_id)
+                rv = client.request(response)
+
+                for order in rv["orders"]:
+                    
+                    if order["state"] == 'PENDING':
+                        mt4id = "0"
+                        if ("tradeClientExtensions" in order):
+                            if ("id" in order["tradeClientExtensions"]):
+                                mt4id = str(order["tradeClientExtensions"]["id"])
+
+                        pendingType = "null"
+                        if (int(order["units"]) > 0):
+                            # side = "long"
+                            if (order["type"] == "LIMIT"):
+                                pendingType = "buyLimit"
+                            if (order["type"] == "STOP"):
+                                pendingType = "buyStop"
+                        else:
+                            # side = "short"
+                            if (order["type"] == "LIMIT"):
+                                pendingType = "sellLimit"
+                            if (order["type"] == "STOP"):
+                                pendingType = "sellStop"
+
+                        if (pendingType != "null"):
+                            currentTrades.append(str(order["instrument"].replace("_",""))+"_"+
+                                                str(pendingType)+"_"+
+                                                str(order["id"])+"_"+
+                                                str(mt4id.replace("@",""))+"_"+
+                                                str(order["createTime"].split('.')[0])+"_"+
+                                                str(order["units"])+"_"+
+                                                str(order["price"])+"_"+
+                                                str(0.00))
+
             else:
                 # get long trades
                 response = trades.OpenTrades(second_account_id)

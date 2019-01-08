@@ -21,7 +21,8 @@ def update_data(token, filepath, first_account_id, second_account_id, live_tradi
     return
 
 def remove_files(filepath, fn):
-    os.remove(filepath+"\\\\"+fn)
+    if os.path.isfile(filepath+"\\\\"+fn):
+        os.remove(filepath+"\\\\"+fn)
     bridge.delete_lock_file(filepath)
     return
 
@@ -162,9 +163,19 @@ while True:
                                 bridge.create_lock_file(path)
                                 bridge.update_trade_data(access_token, path, first_account_id, second_account_id, live_trading)
                                 remove_files(path, fn)
-                            elif 'openmarket-' in fn:
+                            elif 'openMarket-' in fn:
                                 bridge.create_lock_file(path)
                                 bridge.open_trade(access_token, path, fn, first_account_id, second_account_id, live_trading, system)
+                                update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
+                                remove_files(path, fn)
+                            elif 'openPending-' in fn:
+                                bridge.create_lock_file(path)
+                                bridge.place_pending(access_token, path, fn, first_account_id, second_account_id, live_trading, system)
+                                update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
+                                remove_files(path, fn)
+                            elif 'cancelPending-' in fn:
+                                bridge.create_lock_file(path)
+                                bridge.cancel_pending(access_token, path, fn, first_account_id, second_account_id, live_trading, system)
                                 update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
                                 remove_files(path, fn)
                             elif 'closeTrade-' in fn:
