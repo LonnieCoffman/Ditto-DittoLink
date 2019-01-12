@@ -144,7 +144,7 @@ def close_position(token, filepath, filename, first_account_id, second_account_i
                         dashes = (50-17-(len(system)))*"="
                         print(CLOSE_PARTIAL_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, pl=pl))
                 except V20Error as err:
-                    print("V20Error occurred: {}".format(err))
+                    print(system+": V20Error occurred: {}".format(err))
 
         except Exception as e:
             print(e)
@@ -200,7 +200,7 @@ def close_trade(token, filepath, filename, first_account_id, second_account_id, 
                         print(CLOSE_TRADE_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=instrument, direction = side, units=units, nt4id=mt4id, fxtid=fxtid, pl=pl))
                 
             except V20Error as err:
-                print("V20Error occurred: {}".format(err))
+                print(system+": V20Error occurred: {}".format(err))
 
         except Exception as e:
             print(e)
@@ -241,7 +241,12 @@ def cancel_pending(token, filepath, filename, first_account_id, second_account_i
                     units = size
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
                     instrument = pair
-                    mt4id = mt4TradeID
+
+                    if mt4TradeID == "0":
+                        mt4id = "N/A"
+                    else:
+                        mt4id = mt4TradeID
+                    
                     fxtid = tradeID
 
                     dashes = (50-27-(len(system)))*"="
@@ -249,7 +254,7 @@ def cancel_pending(token, filepath, filename, first_account_id, second_account_i
 
 
             except V20Error as err:
-                print("V20Error occurred: {}".format(err))
+                print(system+": V20Error occurred: {}".format(err))
 
         except Exception as e:
             print(e)
@@ -273,18 +278,30 @@ def place_pending(token, filepath, filename, first_account_id, second_account_id
                 size = str(size * -1)
 
             if (pendingType == 'stop'):
-                pendingOrder = StopOrderRequest(
-                    instrument = str(pair),
-                    units = str(size),
-                    price = str(price),
-                    tradeClientExtensions = modOrder.data)
+                if (mt4TradeID == "0"):
+                    pendingOrder = StopOrderRequest(
+                        instrument = str(pair),
+                        units = str(size),
+                        price = str(price))
+                else:
+                    pendingOrder = StopOrderRequest(
+                        instrument = str(pair),
+                        units = str(size),
+                        price = str(price),
+                        tradeClientExtensions = modOrder.data)
 
             if (pendingType == 'limit'):
-                pendingOrder = LimitOrderRequest(
-                    instrument = str(pair),
-                    units = str(size),
-                    price = str(price),
-                    tradeClientExtensions = modOrder.data)
+                if (mt4TradeID == "0"):
+                    pendingOrder = LimitOrderRequest(
+                        instrument = str(pair),
+                        units = str(size),
+                        price = str(price))
+                else:
+                    pendingOrder = LimitOrderRequest(
+                        instrument = str(pair),
+                        units = str(size),
+                        price = str(price),
+                        tradeClientExtensions = modOrder.data)
 
             if (live_trading):
                 client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
@@ -311,13 +328,16 @@ def place_pending(token, filepath, filename, first_account_id, second_account_id
                     units = abs(int(rv["orderCreateTransaction"]["units"]))
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
                     fxtid = int(rv["orderCreateTransaction"]["id"])
-                    mt4id = rv["orderCreateTransaction"]["tradeClientExtensions"]["id"].replace("@","")
+                    if (mt4TradeID == "0"):
+                        mt4id = "N/A"
+                    else:
+                        mt4id = rv["orderCreateTransaction"]["tradeClientExtensions"]["id"].replace("@","")
                     pendingPrice = rv["orderCreateTransaction"]["price"]
                     dashes = (50-24-(len(system)))*"="
                     print(OPEN_PENDING_MESSAGE.format(dashes=dashes, system=system, time=time, pendingType=side+pendingType, price=pendingPrice, instrument=pair, units=units, fxtid=fxtid, mt4id=mt4id))
 
             except V20Error as err:
-                print("V20Error occurred: {}".format(err))
+                print(system+": V20Error occurred: {}".format(err))
         except Exception as e:
             print(e)
     return
@@ -340,10 +360,15 @@ def open_trade(token, filepath, filename, first_account_id, second_account_id, l
             modOrder = ClientExtensions(
                 clientID = "@"+mt4TradeID)
 
-            mktOrder = MarketOrderRequest(
-                instrument = str(pair),
-                units = str(size),
-                tradeClientExtensions = modOrder.data)
+            if (mt4TradeID == "0"):
+                mktOrder = MarketOrderRequest(
+                    instrument = str(pair),
+                    units = str(size))
+            else:
+                mktOrder = MarketOrderRequest(
+                    instrument = str(pair),
+                    units = str(size),
+                    tradeClientExtensions = modOrder.data)
 
             if (live_trading):
                 client = oandapyV20.API(token, environment='live',headers={"Accept-Datetime-Format":"Unix"})
@@ -370,12 +395,15 @@ def open_trade(token, filepath, filename, first_account_id, second_account_id, l
                     units = abs(int(rv["orderFillTransaction"]["units"]))
                     time = (datetime.now() + timedelta(hours = 3)).strftime('%m/%d/%Y @ %I:%M %p')
                     fxtid = int(rv["orderFillTransaction"]["tradeOpened"]["tradeID"])
-                    mt4id = rv["orderFillTransaction"]["tradeOpened"]["clientExtensions"]["id"].replace("@","")
+                    if (mt4TradeID == "0"):
+                        mt4id = "N/A"
+                    else:
+                        mt4id = rv["orderFillTransaction"]["tradeOpened"]["clientExtensions"]["id"].replace("@","")
                     dashes = (50-16-(len(system)))*"="
                     print(OPEN_TRADE_MESSAGE.format(dashes=dashes, system=system, time=time, instrument=pair, direction=side, units=units, fxtid=fxtid, mt4id=mt4id))
                 
             except V20Error as err:
-                print("V20Error occurred: {}".format(err))
+                print(system+": V20Error occurred: {}".format(err))
 
         except Exception as e:
             print(e)
@@ -643,7 +671,7 @@ def update_account(token, filepath, first_account_id, second_account_id, live_tr
                 print(system+": UPDATE ACCOUNT:   Success")
             except V20Error as err:
                 # if there was an error with account record message in error.txt. this will stop all activity in this account.
-                print(err)
+                print(system+": Configuration Error. Check Ditto configuration.")
                 file = open(filepath+"\\\\error.txt","w")
                 file.write(str(err))
                 file.close()

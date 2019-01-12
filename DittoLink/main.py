@@ -1,4 +1,5 @@
 import os
+import ctypes
 import json
 import oandapyV20
 import oandapyV20.endpoints.accounts as accounts
@@ -7,6 +8,8 @@ import functions as bridge
 import time, datetime
 import configparser
 import msvcrt
+
+version = "1.1.1"
 
 #pyinstaller main.py -F -i icon.ico --path C:\Windows\SysWOW64\downlevel --hidden-import requests --hidden-import oandapyV20 --hidden-import six --hidden-import importlib
 
@@ -25,6 +28,14 @@ def remove_files(filepath, fn):
         os.remove(filepath+"\\\\"+fn)
     bridge.delete_lock_file(filepath)
     return
+ctypes.windll.kernel32.SetConsoleTitleW("DittoLink v"+ version +" - Initializing")
+#sys.stdout.write("\x1b]2;DittoLink v"+ version +"\x07")
+
+os.system('cls')
+
+print("")
+print("DittoLink v" + version)
+print("")
 
 # if config.ini file does not exist, create a blank one and exit.
 try:
@@ -90,6 +101,10 @@ for tempTerminal in tempTerminals:
     terminals.append(tempTerminal+"\\\\Ditto\\\\")
 
 firstRun = True
+prevNumInstances = 0
+numInstances = 0
+systemNames = []
+prevSystemNames = []
 
 # run until exited
 while True:
@@ -106,6 +121,8 @@ while True:
                 # check if config file exists
                 if os.path.isfile(path+"\\\\config.ini"):
                     
+                    numInstances += 1
+
                     # account error, do not continue with this system
                     if not os.path.isfile(path+"\\\\error.txt"):
 
@@ -120,6 +137,8 @@ while True:
                         second_account_id = str(expert['settings']['second_account_id'])
                         access_token = str(expert['settings']['token'])
                         live_trading = True if expert['settings']['live_trading'] == "True" else False
+
+                        systemNames.append(system)
 
                         # dual account?
                         if (second_account_id == ""):
@@ -188,6 +207,19 @@ while True:
                                 bridge.close_position(access_token, path, fn, first_account_id, second_account_id, live_trading, system)
                                 update_data(access_token, path, first_account_id, second_account_id, live_trading, system)
                                 remove_files(path, fn)
+
+    # display number of Ditto instances monitored
+    sysNames = (', '.join(systemNames))
+    if numInstances != prevNumInstances or prevSystemNames != systemNames:
+        if numInstances == 1:
+            ctypes.windll.kernel32.SetConsoleTitleW("DittoLink v"+ version +" - Monitoring "+ str(numInstances) +" System - "+sysNames)
+        else:
+            ctypes.windll.kernel32.SetConsoleTitleW("DittoLink v"+ version +" - Monitoring "+ str(numInstances) +" Systems - "+sysNames)
+    
+    prevNumInstances = numInstances    
+    numInstances = 0
+    prevSystemNames = systemNames
+    systemNames = []
 
     firstRun = False
                 
